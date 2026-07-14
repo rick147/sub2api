@@ -78,6 +78,27 @@ describe('OpenAIQuotaResetCell — 外审 F6:影子禁用重置', () => {
     wrapper.unmount()
   })
 
+  it('从账号 extra 缓存恢复重置卡次数和到期时间', () => {
+    const account = makeAccount({
+      parent_account_id: null,
+      extra: {
+        codex_reset_credit_available_count: 2,
+        codex_reset_credit_credits: [
+          { expires_at: '2026-07-05T04:05:06Z' },
+          { expires_at: '2026-07-03T04:05:06Z' },
+        ],
+      },
+    })
+    const wrapper = mount(OpenAIQuotaResetCell, { props: { account } })
+
+    expect(queryOpenAIQuota).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('admin.accounts.openaiQuotaReset.count')
+    expect(wrapper.text()).toContain('admin.accounts.openaiQuotaReset.expiresAt:')
+    expect(wrapper.text()).toContain('+1')
+    expect(resetButton(wrapper).attributes('disabled')).toBeUndefined()
+    wrapper.unmount()
+  })
+
   it('查询后默认折叠为最早到期时间,点击 +N 展开完整列表', async () => {
     vi.mocked(queryOpenAIQuota).mockResolvedValue({
       rate_limit_reset_credits: {

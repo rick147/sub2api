@@ -160,6 +160,41 @@ const resetMessage = ref<string | null>(null)
 const showResetConfirm = ref(false)
 const showResetCreditDetails = ref(false)
 
+const readCachedResetCredits = (account: Account): OpenAIQuotaUsage | null => {
+  const extra = account.extra ?? {}
+  const count = Number(extra.codex_reset_credit_available_count)
+  const credits: { expires_at?: string }[] = []
+
+  if (Array.isArray(extra.codex_reset_credit_credits)) {
+    for (const credit of extra.codex_reset_credit_credits) {
+      if (!credit || typeof credit !== 'object') continue
+      const expiresAt = (credit as { expires_at?: unknown }).expires_at
+      if (typeof expiresAt === 'string' && expiresAt.trim() !== '') {
+        credits.push({ expires_at: expiresAt })
+      }
+    }
+  }
+
+  if (credits.length === 0 && Array.isArray(extra.codex_reset_credit_expires_at_list)) {
+    credits.push(
+      ...extra.codex_reset_credit_expires_at_list
+        .filter((expiresAt): expiresAt is string => typeof expiresAt === 'string' && expiresAt.trim() !== '')
+        .map((expiresAt) => ({ expires_at: expiresAt }))
+    )
+  }
+
+  if (!Number.isFinite(count) && credits.length === 0) return null
+  return {
+    fetched_at: 0,
+    rate_limit_reset_credits: {
+      available_count: Number.isFinite(count) ? count : credits.length,
+      credits
+    }
+  }
+}
+
+data.value = readCachedResetCredits(props.account)
+
 // 影子账号的额度查询会 resolve 到母账号,但影子本身不支持重置(后端返回 409);
 // 重置必须在母账号上进行。前端据此禁用影子的重置入口(外审 F6)。
 const isShadow = computed(() => props.account.parent_account_id != null)
@@ -314,7 +349,7 @@ watch(
   () => props.account.id,
   () => {
     // Account row may be reused across paginated lists; reset local state.
-    data.value = null
+    data.value = readCachedResetCredits(props.account)
     error.value = null
     resetMessage.value = null
     loading.value = false

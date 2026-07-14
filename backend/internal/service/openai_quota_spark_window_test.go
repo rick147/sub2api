@@ -27,7 +27,8 @@ import (
 // stubQuotaAccountRepo 是多账号 AccountRepository stub，仅实现 GetByID。
 type stubQuotaAccountRepo struct {
 	AccountRepository
-	accounts map[int64]*Account
+	accounts     map[int64]*Account
+	extraUpdates map[int64]map[string]any
 }
 
 func (r *stubQuotaAccountRepo) GetByID(_ context.Context, id int64) (*Account, error) {
@@ -44,6 +45,14 @@ func (r *stubQuotaAccountRepo) UpdateCredentials(_ context.Context, id int64, cr
 		return fmt.Errorf("account %d not found", id)
 	}
 	acc.Credentials = credentials
+	return nil
+}
+
+func (r *stubQuotaAccountRepo) UpdateExtra(_ context.Context, id int64, updates map[string]any) error {
+	if r.extraUpdates == nil {
+		r.extraUpdates = make(map[int64]map[string]any)
+	}
+	r.extraUpdates[id] = updates
 	return nil
 }
 
@@ -535,6 +544,12 @@ func TestQueryUsageIncludesResetCreditExpirations_EndToEnd(t *testing.T) {
 		{ExpiresAt: "2026-07-03T04:05:06Z"},
 		{ExpiresAt: "2026-07-04T04:05:06Z"},
 	}, usage.RateLimitResetCredits.Credits)
+	require.Equal(t, 2, repo.extraUpdates[100]["codex_reset_credit_available_count"])
+	require.Equal(t, []OpenAIRateLimitResetCreditDetail{
+		{ExpiresAt: "2026-07-03T04:05:06Z"},
+		{ExpiresAt: "2026-07-04T04:05:06Z"},
+	}, repo.extraUpdates[100]["codex_reset_credit_credits"])
+	require.NotEmpty(t, repo.extraUpdates[100]["codex_reset_credit_updated_at"])
 
 	encoded, err := json.Marshal(usage)
 	require.NoError(t, err)

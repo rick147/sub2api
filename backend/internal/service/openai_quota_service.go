@@ -203,7 +203,22 @@ func (s *OpenAIQuotaService) QueryUsage(ctx context.Context, accountID int64) (*
 			payload.RateLimitResetCredits.AvailableCount = details.AvailableCreditCount
 		}
 	}
+	s.persistResetCreditsSnapshot(ctx, accountID, payload.RateLimitResetCredits)
 	return &payload, nil
+}
+
+func (s *OpenAIQuotaService) persistResetCreditsSnapshot(ctx context.Context, accountID int64, credits *OpenAIRateLimitResetCredits) {
+	if s == nil || s.accountRepo == nil || credits == nil {
+		return
+	}
+	updates := map[string]any{
+		"codex_reset_credit_available_count": credits.AvailableCount,
+		"codex_reset_credit_credits":         credits.Credits,
+		"codex_reset_credit_updated_at":      time.Now().UTC().Format(time.RFC3339),
+	}
+	if err := s.accountRepo.UpdateExtra(ctx, accountID, updates); err != nil {
+		slog.Warn("openai_quota_reset_credits_persist_failed", "account_id", accountID, "error", err)
+	}
 }
 
 func (s *OpenAIQuotaService) queryResetCreditDetails(ctx context.Context, client *req.Client, accessToken, chatGPTAccountID string, fedRAMP bool, accountID int64) *openAIRateLimitResetCreditDetails {
